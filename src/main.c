@@ -36,7 +36,7 @@
 
 void io_init() {
     DDRB &= ~(_BV(RC_IN_BIT));
-    PORTB |= _BV(RC_IN_BIT);
+    // PORTB |= _BV(RC_IN_BIT);
 
     DDRC |= (1 << 2) | (1 << 3);
     GREEN_OFF();
@@ -44,7 +44,49 @@ void io_init() {
 }
 
 void icp_timer_init() {
+    // enable icp interrupt and overflow interrupt
+    TIMSK |= _BV(TICIE1) | _BV(TOIE1);
 
+    // set the interrupt capture edge to high, and start the timer with no pre-scaler
+    TCCR1B |=  _BV(ICES1) | _BV(CS10);
+}
+
+uint8_t overflow_count = 0;
+
+void set_duty(uint8_t);
+
+ISR (TIMER1_CAPT_vect) {
+    // 1 = waiting for high, 0 = waiting for low
+    static uint8_t edge = 1;
+
+    if (edge) {
+        TCNT1 = 0;
+        TCCR1B &= ~_BV(ICES1);
+    } else {
+        TCCR1B |= _BV(ICES1);
+        
+        uint32_t time = TCNT1;
+        uint32_t duty = 0;
+
+        if (time < 17000 || time > 33000) {
+            duty = 0;
+        } else if (time > 32000) {
+            duty = 255;
+        } else if (time <= 16000) {
+            duty = 0;
+        } else {
+            duty = 255 * (time - 16000) / 16000;
+        }
+
+        set_duty(duty);
+    }
+
+    edge = !edge;
+    overflow_count = 0;
+}
+
+ISR (TIMER1_OVF_vect) {
+    set_duty(0);
 }
 
 void pwm_timer_init() {
@@ -55,15 +97,9 @@ void pwm_timer_init() {
     TCCR2 |= _BV(CS20);
 }
 
-enum RCInState {
-    RC_IN_ERROR,
-    RC_IN_WAITING_FOR_SIGNAL,
-    RC_IN_NORMAL
-};
-
 // output pwm on
 ISR (TIMER2_OVF_vect) {
-    RED_ON();
+    if (OCR2) RED_ON();
 }
 
 // output pwn off
@@ -82,12 +118,9 @@ int main() {
 
     sei();
 
-    while (1) {
-        for (uint8_t i = 0; i < 255; i++) {
-            set_duty(i);
-            _delay_ms(2);
-        }
-    }
+    set_duty(0);
+
+    while (1) {}
 }
 
 // ISR (TIMER1_OVF_vect) {
