@@ -32,6 +32,8 @@
 #define GREEN_ON() (GREEN_LED_PORT &= ~(1 << GREEN_LED_BIT))
 #define GREEN_OFF() (GREEN_LED_PORT |= (1 << GREEN_LED_BIT))
 
+#define READ_RC() ((RC_IN_PIN & _BV(RC_IN_BIT)) ? 1 : 0)
+
 void io_init() {
     DDRB &= ~(_BV(RC_IN_BIT));
     PORTB |= _BV(RC_IN_BIT);
@@ -41,33 +43,16 @@ void io_init() {
     RED_OFF();
 }
 
-void timer_init() {
-    // enable interrupt for compa match
-    TIMSK |= _BV(OCIE1A);
+void icp_timer_init() {
 
-     // TODO: calculate based on desired pwm frequency
-    // (0.000001/(1/16000000))-1 = 15, 1 microsecond period
-    OCR1A = 10;
-    OCR1B = 10;
-
-    // start timer 1 with no prescaler, and enable CTC
-    TCCR1B |= _BV(CS00) | _BV(WGM12);
 }
 
-inline int read_rc() {
-    if (RC_IN_PIN & _BV(RC_IN_BIT))
-        return 1;
-    else
-        return 0;
-}
+void pwm_timer_init() {
+    // enable interrupt for overflow and comp match on timer 2 (For output pwm)
+    TIMSK |= _BV(TOIE2) | _BV(OCIE2);
 
-int main() {
-    io_init();
-    timer_init();
-
-    sei();
-
-    while (1) {}
+    // start timer 2 with no prescaler
+    TCCR2 |= _BV(CS20);
 }
 
 enum RCInState {
@@ -76,97 +61,33 @@ enum RCInState {
     RC_IN_NORMAL
 };
 
-volatile struct {
-    enum RCInState state;
-    uint16_t value;
-} rc_in = {
-    .value = 0,
-    .state = RC_IN_WAITING_FOR_SIGNAL
-};
+// output pwm on
+ISR (TIMER2_OVF_vect) {
+    RED_ON();
+}
 
-#define MIN_HIGH 500
-#define MAX_HIGH 2500
+// output pwn off
+ISR (TIMER2_COMP_vect) {
+    RED_OFF();
+}
 
-#define HIGH_FLOOR 1000
-#define HIGH_CEIL 2000
+void set_duty(uint8_t duty) {
+    OCR2 = duty;
+}
 
-// #define MAX_LOW 50000
-#define MAX_LOW 1000000
+int main() {
+    io_init();
+    icp_timer_init();
+    pwm_timer_init();
 
-void update_input() {
-    static uint16_t high_count = 0;
-    static uint32_t low_count = 0;
+    sei();
 
-    int is_high = !read_rc();
-
-    if (is_high) {
-        // reset low count for next pulse
-        if (low_count)
-            low_count = 0;
-
-        if (high_count < MAX_HIGH)
-            high_count++;
-        else
-            rc_in.state = RC_IN_ERROR;
-    } else {
-        // transition from high to low
-        if (high_count > 0) {
-            // pulse was too short
-            if (high_count < MIN_HIGH)
-                rc_in.state = RC_IN_ERROR;
-            else {
-                // pulse was normal, bound to [HIGH_FLOOR, HIGH_CEIL] and set
-                if (high_count <= HIGH_FLOOR)
-                    rc_in.value = HIGH_FLOOR;
-                else if (high_count >= HIGH_CEIL)
-                    rc_in.value = HIGH_CEIL;
-                else
-                    rc_in.value = high_count;
-            }
-
-            // reset high count for next pulse
-            high_count = 0;
+    while (1) {
+        for (uint8_t i = 0; i < 255; i++) {
+            set_duty(i);
+            _delay_ms(2);
         }
-
-        if (low_count < MAX_LOW)
-            low_count++;
-        else
-            rc_in.state = RC_IN_WAITING_FOR_SIGNAL;
     }
-}
-
-void update_output() {
-    switch (rc_in.state) {
-        case RC_IN_ERROR:
-            RED_ON();
-            GREEN_OFF();
-            break;
-
-        case RC_IN_NORMAL:
-            RED_OFF();
-            GREEN_OFF();
-            break;
-
-        case RC_IN_WAITING_FOR_SIGNAL:
-            RED_OFF();
-            GREEN_ON();
-            break;
-    }
-}
-
-uint32_t x = 0;
-
-ISR (TIMER1_COMPA_vect) {
-    if (++x > 1000000) {
-        GREEN_ON();
-        RED_OFF();
-    } else {
-        RED_ON();
-        GREEN_OFF();
-    }
-
-    // update_input();
-    // update_output();
 }
 
 // ISR (TIMER1_OVF_vect) {
