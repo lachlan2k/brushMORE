@@ -36,8 +36,8 @@
 #define PULSE_WIDTH_MAX 35000 
 #define PULSE_WIDTH_MIN 13000
 
-#define PULSE_WIDTH_NEUTRAL (((int32_t)PULSE_WIDTH_CEIL + PULSE_WIDTH_FLOOR) / 2)
-#define PULSE_WIDRH_DEADBAND 1000
+#define PULSE_WIDTH_NEUTRAL 24000
+#define PULSE_WIDTH_DEADBAND 800
 
 void io_init() {
     DDRB &= ~(_BV(RC_IN_BIT));
@@ -66,9 +66,6 @@ ISR (TIMER1_CAPT_vect) {
     if (edge) {
         // reset counter
         TCNT1 = 0;
-        // change to low interrupt
-
-        TCCR1B &= ~_BV(ICES1);
     } else if (overflow_count) {
         // pulse lasted more than 1 overflow (1/1600000*2^16 seconds = 4096us) 
         set_power(0);
@@ -76,14 +73,19 @@ ISR (TIMER1_CAPT_vect) {
         int32_t time = TCNT1;
         int32_t duty = 0;
 
-        if (time < PULSE_WIDTH_MIN || time > PULSE_WIDTH_MAX) {
+        if (
+            time < PULSE_WIDTH_MIN || time > PULSE_WIDTH_MAX // out of range
+            #ifdef PULSE_WIDTH_DEADBAND
+            || (time > (PULSE_WIDTH_NEUTRAL - PULSE_WIDTH_DEADBAND/2) && time < (PULSE_WIDTH_NEUTRAL + PULSE_WIDTH_DEADBAND/2))
+            #endif
+        ) {
             duty = 0;
         } else if (time >= PULSE_WIDTH_CEIL) {
             duty = 255;
         } else if (time <= PULSE_WIDTH_FLOOR) {
-            duty = 0;
+            duty = -255;
         } else {
-            duty = 510 * (PULSE_WIDTH_NEUTRAL - time) / (PULSE_WIDTH_CEIL - PULSE_WIDTH_FLOOR);
+            duty = 510 * (time - PULSE_WIDTH_NEUTRAL) / (PULSE_WIDTH_CEIL - PULSE_WIDTH_FLOOR);
         }
 
         set_power(duty);
@@ -102,7 +104,7 @@ ISR (TIMER1_OVF_vect) {
     if (overflow_count > 25)
         set_power(0);
     else
-        overflow_count = 0;
+        overflow_count++;
 }
 
 void pwm_timer_init() {
