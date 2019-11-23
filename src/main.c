@@ -22,10 +22,10 @@
 #define RC_IN_BIT PB0
 #define RC_IN_PIN PINB
 
-#define RED_ON() (RED_LED_PORT &= ~(1 << RED_LED_BIT))
-#define RED_OFF() (RED_LED_PORT |= (1 << RED_LED_BIT))
-#define GREEN_ON() (GREEN_LED_PORT &= ~(1 << GREEN_LED_BIT))
-#define GREEN_OFF() (GREEN_LED_PORT |= (1 << GREEN_LED_BIT))
+#define RED_ON() (RED_LED_PORT &= ~_BV(RED_LED_BIT))
+#define RED_OFF() (RED_LED_PORT |= _BV(RED_LED_BIT))
+#define GREEN_ON() (GREEN_LED_PORT &= ~_BV(GREEN_LED_BIT))
+#define GREEN_OFF() (GREEN_LED_PORT |= _BV(GREEN_LED_BIT))
 
 
 // 1000us
