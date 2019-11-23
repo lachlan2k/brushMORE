@@ -36,7 +36,7 @@
 #define PULSE_WIDTH_MAX 35000 
 #define PULSE_WIDTH_MIN 13000
 
-#define PULSE_WIDTH_NEUTRAL ((PULSE_WIDTH_CEIL + PULSE_WIDTH_FLOOR) / 2)
+#define PULSE_WIDTH_NEUTRAL (((int32_t)PULSE_WIDTH_CEIL + PULSE_WIDTH_FLOOR) / 2)
 #define PULSE_WIDRH_DEADBAND 1000
 
 void io_init() {
@@ -71,7 +71,7 @@ ISR (TIMER1_CAPT_vect) {
         TCCR1B &= ~_BV(ICES1);
     } else if (overflow_count) {
         // pulse lasted more than 1 overflow (1/1600000*2^16 seconds = 4096us) 
-        set_duty(0);
+        set_power(0);
     } else {
         int32_t time = TCNT1;
         int32_t duty = 0;
