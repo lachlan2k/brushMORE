@@ -53,6 +53,11 @@
 #define PULSE_WIDTH_NEUTRAL 24000
 #define PULSE_WIDTH_DEADBAND 800
 
+// will enable within deadband
+#define BRAKE_ENABLED
+// 0 to 255
+#define BRAKE_POWER 255
+
 void io_init() {
     // todo make this more configurable
     PORTB = _BV(CpFET);
@@ -146,33 +151,18 @@ volatile enum Direction current_direction = DIR_STOPPED;
 
 // output pwm on
 ISR (TIMER2_OVF_vect) {
+    #ifdef BRAKE_ENABLED
+    OCR2 = direction_buffer == DIR_STOPPED ? BRAKE_POWER : duty_buffer;
+    #else
     OCR2 = duty_buffer;
+    #endif
 
     if (direction_buffer != current_direction) {
-        // switch off the side we're doing
         // changing dircetions, turn everything off
         ANFET_OFF();
         APFET_OFF();
         CNFET_OFF();
         CPFET_OFF();
-        // switch (current_direction) {
-        //     case DIR_FWD:
-        //         ANFET_OFF();
-        //         CPFET_OFF();
-        //         break;
-
-        //     case DIR_STOPPED:
-        //         ANFET_OFF();
-        //         APFET_OFF();
-        //         CNFET_OFF();
-        //         CPFET_OFF();
-        //         break;
-
-        //     case DIR_REV:
-        //         APFET_OFF();
-        //         CNFET_OFF();
-        //         break;
-        // }
     }
 
     switch (direction_buffer) {
@@ -186,6 +176,11 @@ ISR (TIMER2_OVF_vect) {
         case DIR_STOPPED:
             GREEN_OFF();
             RED_OFF();
+
+            #ifdef BRAKE_ENABLED
+            CNFET_ON();
+            ANFET_ON();
+            #endif
             break;
 
         case DIR_REV:
@@ -208,7 +203,10 @@ ISR (TIMER2_COMP_vect) {
             break;
 
         case DIR_STOPPED:
-
+            #ifdef BRAKE_ENABLED
+            CNFET_OFF();
+            ANFET_OFF();
+            #endif
             break;
 
         case DIR_REV:
