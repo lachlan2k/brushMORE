@@ -115,18 +115,27 @@ void pwm_timer_init() {
     TCCR2 |= _BV(CS20);
 }
 
-
-enum {
+enum Direction {
     DIR_FWD,
     DIR_STOPPED,
     DIR_REV
-} direction = DIR_STOPPED;
+};
+
+uint8_t duty_buffer = 0;
+
+enum Direction direction_buffer = DIR_STOPPED;
+enum Direction current_direction = DIR_STOPPED;
 
 // output pwm on
 ISR (TIMER2_OVF_vect) {
-    switch (direction) {
+    OCR2 = duty_buffer;
+
+    switch (current_direction) {
+        // todo switch off the low side
+    }
+
+    switch (direction_buffer) {
         case DIR_FWD:
-            GREEN_OFF();
             RED_ON();
             break;
 
@@ -136,32 +145,43 @@ ISR (TIMER2_OVF_vect) {
             break;
 
         case DIR_REV:
-            RED_OFF();
             GREEN_ON();
             break;
     }
+
+    current_direction = direction_buffer;
 }
 
 // output pwn off
 ISR (TIMER2_COMP_vect) {
-    RED_OFF();
-    GREEN_OFF();
+    switch (current_direction) {
+        case DIR_FWD:
+            RED_OFF();
+            break;
+
+        case DIR_STOPPED:
+            break;
+
+        case DIR_REV:
+            GREEN_OFF();
+            break;
+    }
 }
 
 void set_duty(uint8_t duty) {
-    OCR2 = duty;
+    duty_buffer = duty;
 }
 
 void set_power(int16_t power) {
     cli();
     if (power > 0) {
-        direction = DIR_FWD;
+        direction_buffer = DIR_FWD;
         set_duty(power);
     } else if (power < 0) {
-        direction = DIR_REV;
+        direction_buffer = DIR_REV;
         set_duty(-power);
     } else {
-        direction = DIR_STOPPED;
+        direction_buffer = DIR_STOPPED;
         set_duty(0);
     }
     sei();
