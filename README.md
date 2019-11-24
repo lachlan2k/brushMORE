@@ -5,7 +5,7 @@ brushMORE is a WIP Firmware for Brushless ESCs to control ordinary brushed dc mo
 Currently it is configured for use with the Afro Mini 20A, however, it should work with any ESC that runs 
 afro_nfet.hex simonk firmware. I intend on making it easy to configure for other ESCs in the future.
 
-**As of right now, it is not yet functional and only controls PWM on the LEDs, not the fets.**
+**This hasn't been extensively tested so use at your own peril, but it probably should work, maybe**
 
 # Features
  - Configurable deadband

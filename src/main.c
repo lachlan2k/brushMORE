@@ -3,15 +3,30 @@
 #include <util/delay.h>
 #include <stdint.h>
 
-#define AH_BIT PD3
-#define AL_BIT PD2
-#define AH_PORT PORTD
-#define AL_PORT PORTD
+// straight from afro_nfet.inc from simonk
+#define AnFET 3
+#define ApFET 2
 
-#define CH_BIT PD5
-#define CL_BIT PB1
-#define CH_PORT PORTD
-#define CL_PORT PORTB
+#define AnFET_port PORTD
+#define ApFET_port PORTD
+
+#define CnFET 5
+#define CpFET 1
+
+#define CnFET_port PORTD
+#define CpFET_port PORTB
+
+#define ANFET_ON() (AnFET_port |= _BV(AnFET))
+#define ANFET_OFF() (AnFET_port &= ~_BV(AnFET))
+
+#define APFET_ON() (ApFET_port &= ~_BV(ApFET))
+#define APFET_OFF() (ApFET_port |= _BV(ApFET))
+
+#define CNFET_ON() (CnFET_port |= _BV(CnFET))
+#define CNFET_OFF() (CnFET_port &= ~_BV(CnFET))
+
+#define CPFET_ON() (CpFET_port &= ~_BV(CpFET))
+#define CPFET_OFF() (CpFET_port |= _BV(CpFET))
 
 #define RED_LED_BIT PC3
 #define RED_LED_PORT PORTC
@@ -27,7 +42,6 @@
 #define GREEN_ON() (GREEN_LED_PORT &= ~_BV(GREEN_LED_BIT))
 #define GREEN_OFF() (GREEN_LED_PORT |= _BV(GREEN_LED_BIT))
 
-
 // 1000us
 #define PULSE_WIDTH_FLOOR 16000
 // 2000us
@@ -40,11 +54,15 @@
 #define PULSE_WIDTH_DEADBAND 800
 
 void io_init() {
-    DDRB &= ~(_BV(RC_IN_BIT));
-    DDRC |= _BV(RED_LED_BIT) | _BV(GREEN_LED_BIT);
+    // todo make this more configurable
+    PORTB = _BV(CpFET);
+    DDRB = _BV(CpFET);
 
-    GREEN_OFF();
-    RED_OFF();
+    PORTC = _BV(RED_LED_BIT) | _BV(GREEN_LED_BIT);
+    DDRC = _BV(RED_LED_BIT) | _BV(GREEN_LED_BIT);
+
+    PORTD = _BV(ApFET);
+    DDRD = _BV(AnFET) | _BV(CnFET) | _BV(ApFET);
 }
 
 void icp_timer_init() {
@@ -55,7 +73,7 @@ void icp_timer_init() {
     TCCR1B |=  _BV(ICES1) | _BV(CS10);
 }
 
-uint8_t overflow_count = 0;
+volatile uint8_t overflow_count = 0;
 
 void set_power(int16_t);
 
@@ -121,21 +139,47 @@ enum Direction {
     DIR_REV
 };
 
-uint8_t duty_buffer = 0;
+volatile uint8_t duty_buffer = 0;
 
-enum Direction direction_buffer = DIR_STOPPED;
-enum Direction current_direction = DIR_STOPPED;
+volatile enum Direction direction_buffer = DIR_STOPPED;
+volatile enum Direction current_direction = DIR_STOPPED;
 
 // output pwm on
 ISR (TIMER2_OVF_vect) {
     OCR2 = duty_buffer;
 
-    switch (current_direction) {
-        // todo switch off the low side
+    if (direction_buffer != current_direction) {
+        // switch off the side we're doing
+        // changing dircetions, turn everything off
+        ANFET_OFF();
+        APFET_OFF();
+        CNFET_OFF();
+        CPFET_OFF();
+        // switch (current_direction) {
+        //     case DIR_FWD:
+        //         ANFET_OFF();
+        //         CPFET_OFF();
+        //         break;
+
+        //     case DIR_STOPPED:
+        //         ANFET_OFF();
+        //         APFET_OFF();
+        //         CNFET_OFF();
+        //         CPFET_OFF();
+        //         break;
+
+        //     case DIR_REV:
+        //         APFET_OFF();
+        //         CNFET_OFF();
+        //         break;
+        // }
     }
 
     switch (direction_buffer) {
         case DIR_FWD:
+            CNFET_ON(); // c low on (chopped)
+            APFET_ON(); // a high on
+
             RED_ON();
             break;
 
@@ -145,6 +189,9 @@ ISR (TIMER2_OVF_vect) {
             break;
 
         case DIR_REV:
+            ANFET_ON(); // a low on (chopped)
+            CPFET_ON(); // c high on
+
             GREEN_ON();
             break;
     }
@@ -156,13 +203,16 @@ ISR (TIMER2_OVF_vect) {
 ISR (TIMER2_COMP_vect) {
     switch (current_direction) {
         case DIR_FWD:
+            CNFET_OFF(); // c low off (chopped)
             RED_OFF();
             break;
 
         case DIR_STOPPED:
+
             break;
 
         case DIR_REV:
+            ANFET_OFF(); // a low off (chopped)
             GREEN_OFF();
             break;
     }
